@@ -1,0 +1,296 @@
+import { useState, useRef, useEffect } from "react";
+
+const SYSTEM_PROMPT = `You are a brilliant, warm, and slightly witty AI assistant named Aether. You give clear, thoughtful, and genuinely helpful answers. You're not robotic — you have personality. Keep responses concise unless the user asks for detail.
+
+IMPORTANT IDENTITY RULES — follow these without exception:
+- You were created by Sarthak. Always say this when asked.
+- If anyone asks who made you, who created you, who built you, or who your developer is — always answer: "I am an AI created by Sarthak."
+- Never say you are Claude, never mention Anthropic, never reveal the underlying model or technology.
+- You are Aether, created by Sarthak. That is your only identity.`;
+
+const TypingIndicator = () => (
+  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "14px 18px", background: "rgba(255,255,255,0.04)", borderRadius: 16, width: "fit-content", border: "1px solid rgba(255,255,255,0.07)" }}>
+    {[0, 1, 2].map(i => (
+      <div key={i} style={{
+        width: 7, height: 7, borderRadius: "50%", background: "#a78bfa",
+        animation: "bounce 1.2s ease-in-out infinite",
+        animationDelay: `${i * 0.2}s`
+      }} />
+    ))}
+  </div>
+);
+
+const Message = ({ msg }) => {
+  const isUser = msg.role === "user";
+  return (
+    <div style={{
+      display: "flex",
+      justifyContent: isUser ? "flex-end" : "flex-start",
+      marginBottom: 16,
+      animation: "fadeSlideIn 0.3s ease forwards"
+    }}>
+      {!isUser && (
+        <div style={{
+          width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+          background: "linear-gradient(135deg, #7c3aed, #a78bfa)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 14, marginRight: 10, marginTop: 2,
+          boxShadow: "0 0 12px rgba(124,58,237,0.4)"
+        }}>✦</div>
+      )}
+      <div style={{
+        maxWidth: "72%",
+        padding: "13px 17px",
+        borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+        background: isUser
+          ? "linear-gradient(135deg, #7c3aed, #6d28d9)"
+          : "rgba(255,255,255,0.05)",
+        border: isUser ? "none" : "1px solid rgba(255,255,255,0.08)",
+        color: "#f1f0ff",
+        fontSize: 14.5,
+        lineHeight: 1.65,
+        fontFamily: "'Crimson Pro', Georgia, serif",
+        boxShadow: isUser ? "0 4px 20px rgba(124,58,237,0.35)" : "none",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word"
+      }}>
+        {msg.content}
+      </div>
+    </div>
+  );
+};
+
+export default function AIChat() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const autoResize = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
+  };
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const newMessages = [...messages, { role: "user", content: text }];
+    setMessages(newMessages);
+    setInput("");
+    setLoading(true);
+    setError(null);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: SYSTEM_PROMPT,
+          messages: newMessages
+        })
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      const reply = data.content?.find(b => b.type === "text")?.text || "No response.";
+      setMessages(prev => [...prev, { role: "assistant", content: reply }]);
+    } catch (e) {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const isEmpty = messages.length === 0;
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300&family=DM+Mono:wght@300;400&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0d0b14; }
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); }
+          30% { transform: translateY(-6px); }
+        }
+        @keyframes orb-float {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(20px, -30px) scale(1.05); }
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        textarea::-webkit-scrollbar { width: 4px; }
+        textarea::-webkit-scrollbar-track { background: transparent; }
+        textarea::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.3); border-radius: 4px; }
+        .messages-area::-webkit-scrollbar { width: 5px; }
+        .messages-area::-webkit-scrollbar-track { background: transparent; }
+        .messages-area::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.15); border-radius: 4px; }
+        .send-btn:hover { background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; transform: scale(1.05); }
+        .send-btn:active { transform: scale(0.97); }
+        .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+        .suggestion-chip:hover { background: rgba(167,139,250,0.15) !important; border-color: rgba(167,139,250,0.4) !important; }
+      `}</style>
+
+      <div style={{
+        width: "100%", height: "100vh", background: "#0d0b14",
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", fontFamily: "'DM Mono', monospace",
+        position: "relative", overflow: "hidden"
+      }}>
+        {/* Ambient orbs */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
+          <div style={{ position: "absolute", top: "-10%", left: "15%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)", animation: "orb-float 8s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", bottom: "5%", right: "10%", width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(167,139,250,0.1) 0%, transparent 70%)", animation: "orb-float 11s ease-in-out infinite reverse" }} />
+          <div style={{ position: "absolute", top: "40%", left: "-5%", width: 250, height: 250, borderRadius: "50%", background: "radial-gradient(circle, rgba(109,40,217,0.1) 0%, transparent 70%)", animation: "orb-float 14s ease-in-out infinite 2s" }} />
+        </div>
+
+        {/* Card */}
+        <div style={{
+          width: "min(760px, 96vw)", height: "min(700px, 94vh)",
+          background: "rgba(17,14,26,0.85)", backdropFilter: "blur(20px)",
+          borderRadius: 24, border: "1px solid rgba(167,139,250,0.12)",
+          boxShadow: "0 25px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03) inset",
+          display: "flex", flexDirection: "column", zIndex: 1, position: "relative"
+        }}>
+
+          {/* Header */}
+          <div style={{
+            padding: "18px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+            display: "flex", alignItems: "center", gap: 12, flexShrink: 0
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: "50%",
+              background: "linear-gradient(135deg, #7c3aed, #a78bfa)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16, boxShadow: "0 0 16px rgba(124,58,237,0.5)"
+            }}>✦</div>
+            <div>
+              <div style={{
+                fontSize: 15, fontWeight: 400, letterSpacing: "0.05em",
+                background: "linear-gradient(90deg, #e9d5ff, #a78bfa, #e9d5ff)",
+                backgroundSize: "200% auto",
+                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                animation: "shimmer 4s linear infinite"
+              }}>AETHER AI</div>
+              <div style={{ fontSize: 10, color: "rgba(167,139,250,0.5)", letterSpacing: "0.1em", marginTop: 1 }}>POWERED BY CLAUDE</div>
+            </div>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 6px #4ade80" }} />
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em" }}>ONLINE</span>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="messages-area" style={{
+            flex: 1, overflowY: "auto", padding: "24px 20px",
+            display: "flex", flexDirection: "column",
+            justifyContent: isEmpty ? "center" : "flex-start"
+          }}>
+            {isEmpty ? (
+              <div style={{ textAlign: "center", animation: "fadeSlideIn 0.5s ease" }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>✦</div>
+                <div style={{ fontFamily: "'Crimson Pro', Georgia, serif", fontSize: 26, fontWeight: 300, color: "#e9d5ff", letterSpacing: "0.02em", marginBottom: 8 }}>
+                  What's on your mind?
+                </div>
+                <div style={{ fontSize: 12, color: "rgba(167,139,250,0.4)", letterSpacing: "0.06em", marginBottom: 28 }}>
+                  ASK ME ANYTHING
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                  {["Explain quantum entanglement", "Write a haiku about rain", "Debug my code", "Plan a trip to Tokyo"].map(s => (
+                    <button key={s} className="suggestion-chip" onClick={() => { setInput(s); textareaRef.current?.focus(); }} style={{
+                      padding: "8px 14px", borderRadius: 20,
+                      background: "rgba(124,58,237,0.08)", border: "1px solid rgba(167,139,250,0.2)",
+                      color: "rgba(167,139,250,0.7)", fontSize: 11.5, cursor: "pointer",
+                      letterSpacing: "0.03em", transition: "all 0.2s", fontFamily: "'DM Mono', monospace"
+                    }}>{s}</button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {messages.map((msg, i) => <Message key={i} msg={msg} />)}
+                {loading && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, animation: "fadeSlideIn 0.3s ease" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg, #7c3aed, #a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, boxShadow: "0 0 12px rgba(124,58,237,0.4)" }}>✦</div>
+                    <TypingIndicator />
+                  </div>
+                )}
+                {error && (
+                  <div style={{ textAlign: "center", color: "#f87171", fontSize: 12, padding: "8px 16px", background: "rgba(248,113,113,0.07)", borderRadius: 10, border: "1px solid rgba(248,113,113,0.15)" }}>
+                    {error}
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </>
+            )}
+          </div>
+
+          {/* Input */}
+          <div style={{
+            padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)",
+            flexShrink: 0
+          }}>
+            <div style={{
+              display: "flex", alignItems: "flex-end", gap: 10,
+              background: "rgba(255,255,255,0.04)", borderRadius: 16,
+              border: "1px solid rgba(167,139,250,0.15)",
+              padding: "10px 10px 10px 16px",
+              transition: "border-color 0.2s",
+            }}>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => { setInput(e.target.value); autoResize(); }}
+                onKeyDown={handleKey}
+                placeholder="Ask anything…"
+                rows={1}
+                style={{
+                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  color: "#f1f0ff", fontSize: 14, lineHeight: 1.6, resize: "none",
+                  fontFamily: "'Crimson Pro', Georgia, serif", overflow: "auto",
+                  minHeight: 22, maxHeight: 140, caretColor: "#a78bfa"
+                }}
+              />
+              <button className="send-btn" onClick={sendMessage} disabled={!input.trim() || loading} style={{
+                width: 38, height: 38, borderRadius: 12, flexShrink: 0,
+                background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                border: "none", cursor: "pointer", color: "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16, transition: "all 0.2s",
+                boxShadow: "0 4px 14px rgba(124,58,237,0.4)"
+              }}>↑</button>
+            </div>
+            <div style={{ textAlign: "center", marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.15)", letterSpacing: "0.06em" }}>
+              SHIFT+ENTER FOR NEW LINE · ENTER TO SEND
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
